@@ -204,3 +204,4 @@ void           *bd_malloc(uint64);
 
 
 int             dump(void);
+int             dump2(int, int, uint64*);
