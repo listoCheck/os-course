@@ -22,6 +22,8 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+void dump(void);
+int dump2(int pid, int register_num, uint64 *return_value);
 
 // ulib.c
 int stat(const char*, struct stat*);
@@ -41,5 +43,3 @@ void *memcpy(void *, const void *, uint);
 // umalloc.c
 void* malloc(uint);
 void free(void*);
-int dump(void);
-int dump2(int pid, int register_num, uint64 *return_value);
