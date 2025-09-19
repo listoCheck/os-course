@@ -701,8 +701,8 @@ void print_register(const char *reg_name, uint64 reg_value) {
 
 void dump() {
   int *trapframe_int_array = (int *)&myproc()->trapframe->s2;
-  for (int i = 0; i < 20; i += 2) {
-    printf("%d\n", trapframe_int_array[i]);
+  for (int i = 2; i < 11; i += 1) {
+    printf("s%d = %d\n", i/2 + 2, trapframe_int_array[i]);
   }
 }
 
@@ -719,8 +719,7 @@ int dump2(int pid, int register_num, uint64 *return_value) {
         printf("access denied");
         return -1;
       }
-      int n = copyout(myproc()->pagetable, *return_value,
-                      (char *)(&p->trapframe->s2 + (register_num - 2)), 4);
+      int n = copyout(myproc()->pagetable, *return_value, (char *)(&p->trapframe->s2 + (register_num - 2)), 4);
       if (n == -1) {
         printf("write at this address error");
         return -4;
