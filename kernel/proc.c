@@ -702,7 +702,7 @@ void print_register(const char *reg_name, uint64 reg_value) {
 void dump() {
   int *trapframe_int_array = (int *)&myproc()->trapframe->s2;
   for (int i = 2; i < 11; i += 1) {
-    printf("s%d = %d\n", i/2 + 2, trapframe_int_array[i]);
+    printf("%d = %d\n", i/2 + 2, trapframe_int_array[i]);
 
   }
 }
