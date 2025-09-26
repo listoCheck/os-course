@@ -695,17 +695,30 @@ procdump(void)
 }
 
 void print_register(const char *reg_name, uint64 reg_value) {
-  printf("%s: %d\n", reg_name, (uint32)reg_value);
+    printf("%s = %d\n", reg_name, (uint32)reg_value);
 }
 
+void dump(void) {
+    struct proc *p = myproc();
+  
+    if(p == 0 || p->trapframe == 0) {
+        return ;
+    }
+  
+    const char *reg_names[] = {
+        "s2", "s3", "s4", "s5", "s6",
+        "s7", "s8", "s9", "s10", "s11"
+    };
 
-void dump() {
-  int *trapframe_int_array = (int *)&myproc()->trapframe->s2;
-  for (int i = 2; i < 11; i += 1) {
-    printf("s%d = %d\n", i/2 + 1, trapframe_int_array[i]);
-
-  }
+    uint64 *regs = (uint64*)&p->trapframe->s2;
+  
+    for(int i = 0; i < 10; i++) {
+        print_register(reg_names[i], regs[i]);
+    }
+  
+    return ;
 }
+
 
 int dump2(int pid, int register_num, uint64 *return_value) {
   if (register_num > 11 || register_num < 2) {
