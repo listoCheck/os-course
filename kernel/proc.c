@@ -722,25 +722,25 @@ void dump(void) {
 
 int dump2(int pid, int register_num, uint64 *return_value) {
   if (register_num > 11 || register_num < 2) {
-    printf("invalid register number");
-    return -3;
+    return -3; // invalid register number
   }
+
   struct proc *curr_proc = myproc();
   struct proc *p;
+
   for (p = proc; p < &proc[NPROC]; p++) {
     if (p->pid == pid) {
       if (curr_proc != p && p->parent != curr_proc) {
-        printf("access denied");
-        return -1;
+        return -1; // access denied
       }
-      int n = copyout(myproc()->pagetable, *return_value, (char *)(&p->trapframe->s2 + (register_num - 2)), 4);
+      int n = copyout(myproc()->pagetable, *return_value,
+                      (char *)(&p->trapframe->s2 + (register_num - 2)), 4);
       if (n == -1) {
-        printf("write at this address error");
-        return -4;
+        return -4; // copyout failed
       }
-      return 0;
+      return 0; // success
     }
   }
-  printf("process with pid %d doesn't exist", pid);
-  return -2;
+
+  return -2; // process doesn't exist
 }
