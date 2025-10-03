@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include <cstddef>
 #include <stddef.h>
 
 struct cpu cpus[NCPU];
@@ -715,10 +716,10 @@ void dump(void) {
     struct trapframe *tf = p->trapframe;
     uint64 *regs[] = {
     &tf->s2, &tf->s3, &tf->s4, &tf->s5, &tf->s6,
-    &tf->s7, &tf->s8, &tf->s9, &tf->s10, &tf->s11
+    &tf->s7, &tf->s8, &tf->s9, &tf->s10, &tf->s11, NULL
     };
     // получим указатель на массив регистров и пройдемся по нему
-    for(int i = 0; i < 10; i++) {
+    for(int i = 0; regs[i] != NULL; i++) {
         print_register(reg_names[i], *regs[i]);
     }
   
