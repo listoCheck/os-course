@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include <stddef.h>
 
 struct cpu cpus[NCPU];
 
@@ -693,25 +694,27 @@ procdump(void)
     printf("\n");
   }
 }
-
+// ну тут выведем с-регистр и его значение
 void print_register(const char *reg_name, uint64 reg_value) {
     printf("%s = %d\n", reg_name, (uint32)reg_value);
 }
 
 void dump(void) {
     struct proc *p = myproc();
-  
-    if(p == 0 || p->trapframe == 0) {
+    // найдем указатель на прроцесс и на его отсутствие, либо на отсутсвие в нем трапфрейма
+    if(p == NULL || p->trapframe == NULL) {
         return ;
     }
   
     const char *reg_names[] = {
         "s2", "s3", "s4", "s5", "s6",
         "s7", "s8", "s9", "s10", "s11"
-    };
+    }; // проверку не проходило, пришлось городить эту жуть
 
-    uint64 *regs = (uint64*)&p->trapframe->s2;
-  
+    //uint64 *regs = (uint64*)&p->trapframe->s2;
+    struct trapframe *tf = p->trapframe;
+    uint64 *regs = &tf->s2;
+    // получим указатель на массив регистров и пройдемся по нему
     for(int i = 0; i < 10; i++) {
         print_register(reg_names[i], regs[i]);
     }
@@ -721,24 +724,37 @@ void dump(void) {
 
 
 int dump2(int pid, int register_num, uint64 *return_value) {
+  // первая проверка, соответственно чекаем, попал ли наш номер регистра в существующие
   if (register_num > 11 || register_num < 2) {
-    return -3; // invalid register number
+    return -3;
   }
+  
 
-  struct proc *curr_proc = myproc();
+  struct proc *curr_proc = myproc(); //получаем для проверки прав доступа далее
   struct proc *p;
-
-  for (p = proc; p < &proc[NPROC]; p++) {
+  
+  for (p = proc; p < &proc[NPROC]; p++) { // ищем нужный пид, если ненашли, то ливаем с -2 полсе конца цикла
     if (p->pid == pid) {
+      // проверяем, можем ли читать
       if (curr_proc != p && p->parent != curr_proc) {
-        return -1; // access denied
+        return -1;
       }
-      int n = copyout(myproc()->pagetable, *return_value,
-                      (char *)(&p->trapframe->s2 + (register_num - 2)), 4);
+      struct trapframe *tf = p->trapframe;
+
+      uint64 *s_regs[] = {
+      &tf->s2, &tf->s3, &tf->s4, &tf->s5, &tf->s6,
+      &tf->s7, &tf->s8, &tf->s9, &tf->s10, &tf->s11
+      };
+
+      uint64 val = *s_regs[register_num - 2];
+      // получаем нужный регистр, беря с2 и добавляя к нему смещение, а далее копируем из ядра в память пользователя
+      //int n = copyout(myproc()->pagetable, *return_value, (char *)(&p->trapframe->s2 + (register_num - 2)), 4);
+      int n = copyout(myproc()->pagetable, *return_value, (char *)&val, sizeof(val));
+      // не получилось скопировать
       if (n == -1) {
-        return -4; // copyout failed
+        return -4;
       }
-      return 0; // success
+      return 0;
     }
   }
 
