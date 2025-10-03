@@ -713,10 +713,13 @@ void dump(void) {
 
     //uint64 *regs = (uint64*)&p->trapframe->s2;
     struct trapframe *tf = p->trapframe;
-    uint64 *regs = &tf->s2;
+    uint64 *regs[] = {
+    &tf->s2, &tf->s3, &tf->s4, &tf->s5, &tf->s6,
+    &tf->s7, &tf->s8, &tf->s9, &tf->s10, &tf->s11
+    };
     // получим указатель на массив регистров и пройдемся по нему
     for(int i = 0; i < 10; i++) {
-        print_register(reg_names[i], regs[i]);
+        print_register(reg_names[i], *regs[i]);
     }
   
     return ;
@@ -741,12 +744,12 @@ int dump2(int pid, int register_num, uint64 *return_value) {
       }
       struct trapframe *tf = p->trapframe;
 
-      uint64 *s_regs[] = {
+      uint64 *regs[] = {
       &tf->s2, &tf->s3, &tf->s4, &tf->s5, &tf->s6,
       &tf->s7, &tf->s8, &tf->s9, &tf->s10, &tf->s11
       };
 
-      uint64 val = *s_regs[register_num - 2];
+      uint64 val = *regs[register_num - 2];
       // получаем нужный регистр, беря с2 и добавляя к нему смещение, а далее копируем из ядра в память пользователя
       //int n = copyout(myproc()->pagetable, *return_value, (char *)(&p->trapframe->s2 + (register_num - 2)), 4);
       int n = copyout(myproc()->pagetable, *return_value, (char *)&val, sizeof(val));
