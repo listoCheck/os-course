@@ -4,7 +4,6 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
-
 // Parsed command representation
 #define EXEC  1
 #define REDIR 2
@@ -228,21 +227,34 @@ strtok(char *str, const char *delim)
   return token;
 }
 
-void run_func(struct func *f, int argc, char **argv) {
-    if (strcmp(f->name, "sum") == 0 && argc == 3) {
-        int a = atoi(argv[1]);
-        int b = atoi(argv[2]);
-        printf("%d\n", a + b);
-        return;
-    }
 
-    if (strcmp(f->name, "greet") == 0) {
-        printf("Hello\n");
-        return;
+// Конвертирует int в строку, возвращает длину
+// Конвертация числа в строку
+int itoa(int val, char *buf) {
+    char tmp[16];
+    int i = 0, j, neg = 0;
+    if (val < 0) {
+        neg = 1;
+        val = -val;
     }
+    do {
+        tmp[i++] = '0' + (val % 10);
+        val /= 10;
+    } while (val > 0);
+
+    int len = 0;
+    if (neg) buf[len++] = '-';
+    for (j = i-1; j >= 0; j--)
+        buf[len++] = tmp[j];
+    buf[len] = 0;
+    return len;
+}
+
+void run_func(struct func *f, int argc, char **argv) {
     char expanded[MAXBODY];
     strcpy(expanded, f->body);
 
+    // Подстановка $1..$9
     for (int i = 1; i < argc && i <= 9; i++) {
         char var[3] = { '$', '0'+i, 0 };
         char *pos = my_strstr(expanded, var);
@@ -261,9 +273,64 @@ void run_func(struct func *f, int argc, char **argv) {
         }
     }
 
+    // Простая арифметика: число OP число
+    int a = 0, b = 0;
+    char op = 0;
+    char *ptr = expanded;
+
+    // Убираем пробелы
+    char clean[MAXBODY];
+    int j = 0;
+    for (int i = 0; expanded[i]; i++) {
+        if (expanded[i] != ' ')
+            clean[j++] = expanded[i];
+    }
+    clean[j] = 0;
+    ptr = clean;
+
+    // Найдем оператор
+    char *op_ptr = 0;
+    for (int i = 0; ptr[i]; i++) {
+        if (ptr[i] == '+' || ptr[i] == '-' || ptr[i] == '*' || ptr[i] == '/') {
+            op = ptr[i];
+            op_ptr = &ptr[i];
+            break;
+        }
+    }
+
+    if (op_ptr) {
+        *op_ptr = 0;
+        a = atoi(ptr);
+        b = atoi(op_ptr + 1);
+        int result = 0;
+        switch(op) {
+            case '+': result = a + b; break;
+            case '-': result = a - b; break;
+            case '*': result = a * b; break;
+            case '/': result = (b != 0 ? a / b : 0); break;
+        }
+        char buf[32];
+        int n = itoa(result, buf);
+        write(1, buf, n);
+        write(1, "\n", 1);
+        return;
+    }
+
+    // Если арифметики нет — выводим как строку
+    int len = strlen(expanded);
+    if (len > 0) {
+        write(1, expanded, len);
+        write(1, "\n", 1);
+        return;
+    }
+
+    // Иначе выполняем как команду
     struct cmd *c = parsecmd(expanded);
     runcmd(c);
 }
+
+
+
 
 
 
