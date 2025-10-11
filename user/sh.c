@@ -1,6 +1,7 @@
 // Shell.
 
 #include "kernel/types.h"
+#include "kernel/stat.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
 
@@ -31,6 +32,20 @@ struct redircmd {
   int mode;
   int fd;
 };
+// for dop
+#define MAXFUNCS 16
+#define MAXNAME 32
+#define MAXBODY 256
+
+struct func {
+    char name[MAXNAME];
+    char args[MAXARGS][MAXNAME];
+    int argc;
+    char body[MAXBODY];
+};
+//
+struct func funcs[MAXFUNCS];
+int func_count = 0;
 
 struct pipecmd {
   int type;
@@ -141,6 +156,112 @@ getcmd(char *buf, int nbuf)
     return -1;
   return 0;
 }
+struct func* find_func(char *name) {
+    for (int i = 0; i < func_count; i++) {
+        if (strcmp(funcs[i].name, name) == 0)
+            return &funcs[i];
+    }
+    return 0;
+}
+
+char* my_strstr(const char *haystack, const char *needle) {
+    if (!*needle) return (char*)haystack;
+    for (; *haystack; haystack++) {
+        if (*haystack == *needle) {
+            const char *h = haystack, *n = needle;
+            while (*h && *n && *h == *n) {
+                h++; n++;
+            }
+            if (!*n) return (char*)haystack;
+        }
+    }
+    return 0;
+}
+
+int
+strncmp(const char *s1, const char *s2, int n)
+{
+  for (int i = 0; i < n; i++) {
+    if (s1[i] != s2[i] || s1[i] == 0 || s2[i] == 0)
+      return (unsigned char)s1[i] - (unsigned char)s2[i];
+  }
+  return 0;
+}
+
+
+char*
+strrchr(const char *s, int c)
+{
+  const char *last = 0;
+  for (; *s; s++) {
+    if (*s == (char)c)
+      last = s;
+  }
+  return (char*)last;
+}
+
+char*
+strtok(char *str, const char *delim)
+{
+  static char *last;
+  if (str)
+    last = str;
+  if (!last)
+    return 0;
+
+  // Пропустить разделители
+  while (*last && strchr(delim, *last))
+    last++;
+  if (!*last)
+    return 0;
+
+  char *token = last;
+  while (*last && !strchr(delim, *last))
+    last++;
+
+  if (*last) {
+    *last = '\0';
+    last++;
+  } else {
+    last = 0;
+  }
+
+  return token;
+}
+
+void run_func(struct func *f, int argc, char **argv) {
+    char expanded[MAXBODY];
+    strcpy(expanded, f->body);
+
+    for (int i = 1; i < argc && i < 10; i++) {
+        char var[3];
+        var[0] = '$';
+        var[1] = '0' + i;
+        var[2] = '\0';
+
+        char *pos = my_strstr(expanded, var);
+        if (pos) {
+            char tmp[MAXBODY];
+            int prefix_len = pos - expanded;
+            int var_len = 2; // "$X"
+            int arg_len = strlen(argv[i]);
+            int suffix_len = strlen(pos + var_len);
+
+            if (prefix_len + arg_len + suffix_len >= MAXBODY)
+                continue;
+
+            memmove(tmp, expanded, prefix_len);
+            memmove(tmp + prefix_len, argv[i], arg_len);
+            memmove(tmp + prefix_len + arg_len, pos + var_len, suffix_len + 1);
+
+            strcpy(expanded, tmp);
+        }
+    }
+
+    struct cmd *c = parsecmd(expanded);
+    runcmd(c);
+}
+
 
 int
 main(void)
@@ -156,8 +277,84 @@ main(void)
     }
   }
 
-  // Read and run input commands.
   while(getcmd(buf, sizeof(buf)) >= 0){
+    if(buf[0] == 0)
+      continue;
+
+    if (strncmp(buf, "function ", 9) == 0) {
+      char *p = buf + 9;
+      char name[MAXNAME];
+      int i = 0;
+
+      while (*p && *p != ' ' && *p != '\t' && *p != '\n' && i < MAXNAME-1)
+        name[i++] = *p++;
+      name[i] = '\0';
+
+      while (*p == ' ') p++;
+      int argc = 0;
+      char args[MAXARGS][MAXNAME];
+      if (*p == '(') {
+        p++;
+        while (*p && *p != ')') {
+          while (*p == ' ' || *p == ',') p++;
+          if (*p == ')') break;
+          i = 0;
+          while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != ',' && *p != ')' && i < MAXNAME-1)
+            args[argc][i++] = *p++;
+          args[argc][i] = '\0';
+          argc++;
+          while (*p == ' ' || *p == ',') p++;
+        }
+        if (*p == ')') p++;
+      }
+
+      char *start = strchr(p, '{');
+      char *end   = strrchr(p, '}');
+      if (!start || !end || end <= start) {
+        printf("syntax error in function definition\n");
+        continue;
+      }
+
+      char body[MAXBODY];
+      int len = end - start - 1;
+      if (len >= MAXBODY) len = MAXBODY - 1;
+      for (i = 0; i < len; i++)
+        body[i] = start[i+1];
+      body[len] = '\0';
+
+      if (func_count < MAXFUNCS) {
+        struct func *f = &funcs[func_count++];
+        strcpy(f->name, name);
+        strcpy(f->body, body);
+        f->argc = argc;
+        for (int j = 0; j < argc; j++)
+          strcpy(f->args[j], args[j]);
+        printf("Function '%s' defined with %d args.\n", name, argc);
+      } else {
+        printf("Too many functions defined.\n");
+      }
+
+      continue;
+    }
+
+    char *argv[16];
+    int argc = 0;
+    char *token = strtok(buf, " \t\n");
+    while (token && argc < 16) {
+      argv[argc++] = token;
+      token = strtok(0, " \t\n");
+    }
+    argv[argc] = 0;
+
+    struct func *f = 0;
+    if (argc > 0)
+      f = find_func(argv[0]);
+
+    if (f) {
+      run_func(f, argc, argv);
+      continue;
+    }
+    
     if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
       // Chdir must be called by the parent, not the child.
       buf[strlen(buf)-1] = 0;  // chop \n
@@ -165,12 +362,14 @@ main(void)
         fprintf(2, "cannot cd %s\n", buf+3);
       continue;
     }
+
     if(fork1() == 0)
       runcmd(parsecmd(buf));
     wait(0);
   }
   exit(0);
 }
+
 
 void
 panic(char *s)
@@ -492,3 +691,5 @@ nulterminate(struct cmd *cmd)
   }
   return cmd;
 }
+
+
