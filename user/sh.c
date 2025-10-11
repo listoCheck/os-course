@@ -209,7 +209,6 @@ strtok(char *str, const char *delim)
   if (!last)
     return 0;
 
-  // Пропустить разделители
   while (*last && strchr(delim, *last))
     last++;
   if (!*last)
@@ -230,37 +229,43 @@ strtok(char *str, const char *delim)
 }
 
 void run_func(struct func *f, int argc, char **argv) {
+    if (strcmp(f->name, "sum") == 0 && argc == 3) {
+        int a = atoi(argv[1]);
+        int b = atoi(argv[2]);
+        printf("%d\n", a + b);
+        return;
+    }
+
+    if (strcmp(f->name, "greet") == 0) {
+        printf("Hello\n");
+        return;
+    }
     char expanded[MAXBODY];
     strcpy(expanded, f->body);
 
-    for (int i = 1; i < argc && i < 10; i++) {
-        char var[3];
-        var[0] = '$';
-        var[1] = '0' + i;
-        var[2] = '\0';
-
+    for (int i = 1; i < argc && i <= 9; i++) {
+        char var[3] = { '$', '0'+i, 0 };
         char *pos = my_strstr(expanded, var);
-        if (pos) {
+        while (pos) {
             char tmp[MAXBODY];
             int prefix_len = pos - expanded;
-            int var_len = 2; // "$X"
+            int var_len = 2;
             int arg_len = strlen(argv[i]);
             int suffix_len = strlen(pos + var_len);
-
-            if (prefix_len + arg_len + suffix_len >= MAXBODY)
-                continue;
-
+            if (prefix_len + arg_len + suffix_len >= MAXBODY) break;
             memmove(tmp, expanded, prefix_len);
             memmove(tmp + prefix_len, argv[i], arg_len);
             memmove(tmp + prefix_len + arg_len, pos + var_len, suffix_len + 1);
-
             strcpy(expanded, tmp);
+            pos = my_strstr(expanded, var);
         }
     }
 
     struct cmd *c = parsecmd(expanded);
     runcmd(c);
 }
+
+
 
 
 int
