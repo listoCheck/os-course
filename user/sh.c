@@ -163,7 +163,9 @@ struct func* find_func(char *name) {
     return 0;
 }
 
-char* my_strstr(const char *haystack, const char *needle) {
+//поиск подстроки needle в строке haystack
+char*
+my_strstr(const char *haystack, const char *needle) {
     if (!*needle) return (char*)haystack;
     for (; *haystack; haystack++) {
         if (*haystack == *needle) {
@@ -177,6 +179,7 @@ char* my_strstr(const char *haystack, const char *needle) {
     return 0;
 }
 
+//Сравнивает не более чем n символов двух строк s1 и s2.
 int
 strncmp(const char *s1, const char *s2, int n)
 {
@@ -187,7 +190,7 @@ strncmp(const char *s1, const char *s2, int n)
   return 0;
 }
 
-
+//ищет последнее вхождение символа c в строке s
 char*
 strrchr(const char *s, int c)
 {
@@ -199,6 +202,7 @@ strrchr(const char *s, int c)
   return (char*)last;
 }
 
+//азделяет строку на токены
 char*
 strtok(char *str, const char *delim)
 {
@@ -228,8 +232,7 @@ strtok(char *str, const char *delim)
 }
 
 
-// Конвертирует int в строку, возвращает длину
-// Конвертация числа в строку
+// Преобразует целое число val в строку и записывает в buf, ну а потом возвращает длину
 int itoa(int val, char *buf) {
     char tmp[16];
     int i = 0, j, neg = 0;
@@ -254,7 +257,6 @@ void run_func(struct func *f, int argc, char **argv) {
     char expanded[MAXBODY];
     strcpy(expanded, f->body);
 
-    // Подстановка $1..$9
     for (int i = 1; i < argc && i <= 9; i++) {
         char var[3] = { '$', '0'+i, 0 };
         char *pos = my_strstr(expanded, var);
@@ -273,50 +275,77 @@ void run_func(struct func *f, int argc, char **argv) {
         }
     }
 
-    // Простая арифметика: число OP число
-    int a = 0, b = 0;
-    char op = 0;
-    char *ptr = expanded;
-
-    // Убираем пробелы
     char clean[MAXBODY];
-    int j = 0;
-    for (int i = 0; expanded[i]; i++) {
+    int ci = 0;
+    for (int i = 0; expanded[i] && ci < MAXBODY-1; i++) {
         if (expanded[i] != ' ')
-            clean[j++] = expanded[i];
+            clean[ci++] = expanded[i];
     }
-    clean[j] = 0;
-    ptr = clean;
+    clean[ci] = 0;
 
-    // Найдем оператор
-    char *op_ptr = 0;
-    for (int i = 0; ptr[i]; i++) {
-        if (ptr[i] == '+' || ptr[i] == '-' || ptr[i] == '*' || ptr[i] == '/') {
-            op = ptr[i];
-            op_ptr = &ptr[i];
-            break;
-        }
-    }
+    int isdigit_local(char c) { return c >= '0' && c <= '9'; }
 
-    if (op_ptr) {
-        *op_ptr = 0;
-        a = atoi(ptr);
-        b = atoi(op_ptr + 1);
+    if (clean[0]) {
+        char *p = clean;
+        int first = 1;
         int result = 0;
-        switch(op) {
-            case '+': result = a + b; break;
-            case '-': result = a - b; break;
-            case '*': result = a * b; break;
-            case '/': result = (b != 0 ? a / b : 0); break;
+        char op = 0;
+        int parse_error = 0;
+
+        while (*p && !parse_error) {
+            int neg = 0;
+            if (first) {
+                if (*p == '+') p++;
+                else if (*p == '-') { neg = 1; p++; }
+            }
+
+            if (!isdigit_local(*p)) { parse_error = 1; break; }
+
+            int val = 0;
+            while (*p && isdigit_local(*p)) {
+                val = val * 10 + (*p - '0');
+                p++;
+            }
+            if (neg) val = -val;
+
+            if (first) {
+                result = val;
+                first = 0;
+            } else {
+                switch (op) {
+                    case '+': result = result + val; break;
+                    case '-': result = result - val; break;
+                    case '*': result = result * val; break;
+                    case '/':
+                        if (val == 0) { parse_error = 1; break; }
+                        result = result / val;
+                        break;
+                    default: parse_error = 1; break;
+                }
+                if (parse_error) break;
+            }
+
+            if (!*p) break;
+
+            if (*p == '+' || *p == '-' || *p == '*' || *p == '/') {
+                op = *p;
+                p++;
+                if (!*p) { parse_error = 1; break; }
+            } else {
+                parse_error = 1;
+                break;
+            }
         }
-        char buf[32];
-        int n = itoa(result, buf);
-        write(1, buf, n);
-        write(1, "\n", 1);
-        return;
+
+        if (!parse_error && !first && *p == 0) {
+            char buf[32];
+            int n = itoa(result, buf);
+            write(1, buf, n);
+            write(1, "\n", 1);
+            return;
+        }
     }
 
-    // Если арифметики нет — выводим как строку
     int len = strlen(expanded);
     if (len > 0) {
         write(1, expanded, len);
@@ -324,10 +353,10 @@ void run_func(struct func *f, int argc, char **argv) {
         return;
     }
 
-    // Иначе выполняем как команду
     struct cmd *c = parsecmd(expanded);
     runcmd(c);
 }
+
 
 
 
