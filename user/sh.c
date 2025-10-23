@@ -31,7 +31,7 @@ struct redircmd {
   int mode;
   int fd;
 };
-// for dop
+
 #define MAXFUNCS 16
 #define MAXNAME 32
 #define MAXBODY 256
@@ -252,11 +252,129 @@ int itoa(int val, char *buf) {
     buf[len] = 0;
     return len;
 }
+static char *trim(char *s) {
+    if (!s) return s;
+    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
+    char *end = s + strlen(s) - 1;
+    while (end >= s && (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')) {
+        *end = 0;
+        end--;
+    }
+    return s;
+}
+static int startswith(const char *s, const char *pref) {
+    while (*pref) {
+        if (*s++ != *pref++) return 0;
+    }
+    return 1;
+}
+
+static int is_arith_string(const char *s) {
+    if (!s) return 0;
+    int found_digit = 0;
+    while (*s) {
+        char c = *s++;
+        if (c == ' ' || c == '\t') continue;
+        if ((c >= '0' && c <= '9') || c=='+' || c=='-' || c=='*' || c=='/') {
+            if (c >= '0' && c <= '9') found_digit = 1;
+            continue;
+        }
+        return 0;
+    }
+    return found_digit;
+}
+
+static int eval_arith(const char *s, int *out) {
+    if (!s) return 0;
+    // Скопируем в локальный буфер с удалением пробелов
+    char buf[MAXBODY];
+    int bi = 0;
+    for (const char *p = s; *p && bi < (int)sizeof(buf)-1; p++) {
+        if (*p != ' ' && *p != '\t') buf[bi++] = *p;
+    }
+    buf[bi] = 0;
+    if (bi == 0) return 0;
+
+    int isdigit_local(char c) { return c >= '0' && c <= '9'; }
+
+    const char *p = buf;
+    int first = 1;
+    int result = 0;
+    char op = 0;
+    int parse_error = 0;
+
+    while (*p && !parse_error) {
+        int neg = 0;
+        if (first) {
+            if (*p == '+') p++;
+            else if (*p == '-') { neg = 1; p++; }
+        }
+
+        if (!isdigit_local(*p)) { parse_error = 1; break; }
+
+        int val = 0;
+        while (*p && isdigit_local(*p)) {
+            val = val * 10 + (*p - '0');
+            p++;
+        }
+        if (neg) val = -val;
+
+        if (first) {
+            result = val;
+            first = 0;
+        } else {
+            switch (op) {
+                case '+': result = result + val; break;
+                case '-': result = result - val; break;
+                case '*': result = result * val; break;
+                case '/':
+                    if (val == 0) { parse_error = 1; break; }
+                    result = result / val;
+                    break;
+                default: parse_error = 1; break;
+            }
+            if (parse_error) break;
+        }
+
+        if (!*p) break;
+
+        if (*p == '+' || *p == '-' || *p == '*' || *p == '/') {
+            op = *p;
+            p++;
+            if (!*p) { parse_error = 1; break; }
+        } else {
+            parse_error = 1;
+            break;
+        }
+    }
+
+    if (!parse_error && !first && *p == 0) {
+        *out = result;
+        return 1;
+    }
+    return 0;
+}
+
+char* strncpy(char *dst, const char *src, int n) {
+    int i;
+    for (i = 0; i < n && src[i]; i++) dst[i] = src[i];
+    for (; i < n; i++) dst[i] = 0;
+    return dst;
+}
+char* my_strncat(char *dst, const char *src, int n) {
+    char *p = dst;
+    while (*p) p++;
+    int i;
+    for (i = 0; i < n && src[i]; i++) *p++ = src[i];
+    *p = 0;
+    return dst;
+}
 
 void run_func(struct func *f, int argc, char **argv) {
     char expanded[MAXBODY];
     strcpy(expanded, f->body);
 
+    // Подстановка позиционных параметров $1..$9
     for (int i = 1; i < argc && i <= 9; i++) {
         char var[3] = { '$', '0'+i, 0 };
         char *pos = my_strstr(expanded, var);
@@ -264,110 +382,94 @@ void run_func(struct func *f, int argc, char **argv) {
             char tmp[MAXBODY];
             int prefix_len = pos - expanded;
             int var_len = 2;
-            int arg_len = strlen(argv[i]);
+            char *arg = (i < argc) ? argv[i] : "";
+            int arg_len = strlen(arg);
             int suffix_len = strlen(pos + var_len);
             if (prefix_len + arg_len + suffix_len >= MAXBODY) break;
             memmove(tmp, expanded, prefix_len);
-            memmove(tmp + prefix_len, argv[i], arg_len);
+            memmove(tmp + prefix_len, arg, arg_len);
             memmove(tmp + prefix_len + arg_len, pos + var_len, suffix_len + 1);
             strcpy(expanded, tmp);
             pos = my_strstr(expanded, var);
         }
     }
+    
 
-    char clean[MAXBODY];
-    int ci = 0;
-    for (int i = 0; expanded[i] && ci < MAXBODY-1; i++) {
-        if (expanded[i] != ' ')
-            clean[ci++] = expanded[i];
-    }
-    clean[ci] = 0;
+    // Теперь обрабатываем тело построчно
+    char *line = expanded;
+    while (*line) {
+        // Найдём конец строки
+        char *nl = strchr(line, '\n');
+        char save = 0;
+        if (nl) {
+            save = *nl;
+            *nl = 0;
+        }
 
-    int isdigit_local(char c) { return c >= '0' && c <= '9'; }
-
-    if (clean[0]) {
-        char *p = clean;
-        int first = 1;
-        int result = 0;
-        char op = 0;
-        int parse_error = 0;
-
-        while (*p && !parse_error) {
-            int neg = 0;
-            if (first) {
-                if (*p == '+') p++;
-                else if (*p == '-') { neg = 1; p++; }
-            }
-
-            if (!isdigit_local(*p)) { parse_error = 1; break; }
-
-            int val = 0;
-            while (*p && isdigit_local(*p)) {
-                val = val * 10 + (*p - '0');
-                p++;
-            }
-            if (neg) val = -val;
-
-            if (first) {
-                result = val;
-                first = 0;
-            } else {
-                switch (op) {
-                    case '+': result = result + val; break;
-                    case '-': result = result - val; break;
-                    case '*': result = result * val; break;
-                    case '/':
-                        if (val == 0) { parse_error = 1; break; }
-                        result = result / val;
-                        break;
-                    default: parse_error = 1; break;
+        char *trimmed = trim(line);
+        if (trimmed && *trimmed) {
+            // Если строка начинается с "echo", обработаем как встроенную
+            if (startswith(trimmed, "echo") && (trimmed[4] == ' ' || trimmed[4] == '\t' || trimmed[4] == 0)) {
+                char *args = trimmed + 4;
+                args = trim(args);
+                if (!args) args = "";
+                // Если аргумент — арифметическое выражение, вычислим его
+                int val;
+                if (is_arith_string(args) && eval_arith(args, &val)) {
+                    char buf[64];
+                    int n = itoa(val, buf);
+                    write(1, buf, n);
+                    write(1, "\n", 1);
+                } else {
+                    int len = strlen(args);
+                    if (len > 0) {
+                        write(1, args, len);
+                    }
+                    write(1, "\n", 1);
                 }
-                if (parse_error) break;
-            }
-
-            if (!*p) break;
-
-            if (*p == '+' || *p == '-' || *p == '*' || *p == '/') {
-                op = *p;
-                p++;
-                if (!*p) { parse_error = 1; break; }
+            } else if (is_arith_string(trimmed)) {
+                // строка — только арифметика
+                int val;
+                if (eval_arith(trimmed, &val)) {
+                    char buf[64];
+                    int n = itoa(val, buf);
+                    write(1, buf, n);
+                    write(1, "\n", 1);
+                } else {
+                    // не удалось распарсить — выводим как текст
+                    int len = strlen(trimmed);
+                    write(1, trimmed, len);
+                    write(1, "\n", 1);
+                }
             } else {
-                parse_error = 1;
-                break;
+                // попытка выполнить как команда: создаём child и runcmd в нём
+                int pid = fork();
+                if (pid < 0) {
+                    fprintf(2, "fork failed in function\n");
+                } else if (pid == 0) {
+                    // child: выполнить команду, используя parsecmd + runcmd
+                    struct cmd *c = parsecmd(trimmed);
+                    runcmd(c); // не возвращает
+                } else {
+                    // parent: ждём
+                    wait(0);
+                }
             }
         }
 
-        if (!parse_error && !first && *p == 0) {
-            char buf[32];
-            int n = itoa(result, buf);
-            write(1, buf, n);
-            write(1, "\n", 1);
-            return;
+        if (nl) {
+            *nl = save;
+            line = nl + 1;
+        } else {
+            break;
         }
     }
-
-    int len = strlen(expanded);
-    if (len > 0) {
-        write(1, expanded, len);
-        write(1, "\n", 1);
-        return;
-    }
-
-    struct cmd *c = parsecmd(expanded);
-    runcmd(c);
 }
-
-
-
-
-
-
-
 
 int
 main(void)
 {
-  static char buf[100];
+  static char buf[2048];
   int fd;
 
   // Ensure that three file descriptors are open.
@@ -382,12 +484,55 @@ main(void)
     if(buf[0] == 0)
       continue;
 
-    if (strncmp(buf, "function ", 9) == 0) {
-      char *p = buf + 9;
+    // trim leading spaces
+    char *bptr = buf;
+    while (*bptr == ' ' || *bptr == '\t') bptr++;
+
+    if (strncmp(bptr, "function ", 9) == 0) {
+      // Парсим определение функции. Поддерживаем многострочные тела: если в текущей строке нет '}', читаем новые строки пока не появится '}'
+      char localbuf[MAXBODY];
+      memset(localbuf, 0, sizeof(localbuf));
+      // копируем текущую строку
+      strncpy(localbuf, bptr + 9, sizeof(localbuf)-1);
+
+      // Если в копии нет '{' или нет '}', будем дописывать следующие строковые вводы, пока не найдём закрывающую '}'
+      char *start = strchr(localbuf, '{');
+      char *end = strrchr(localbuf, '}');
+
+      // Если нет '{', считать это синтаксической ошибкой
+      if (!start) {
+        printf("syntax error in function definition: missing '{'\n");
+        continue;
+      }
+
+      // Если нет '}', нужно читать дополнительные строковые вводы и дописывать в localbuf
+      while (!end) {
+        char more[512];
+        if (getcmd(more, sizeof(more)) < 0) break; // EOF
+        // append more (сохраняем перевод строки как \n)
+        int cur = strlen(localbuf);
+        int add = strlen(more);
+        if (cur + add + 2 >= (int)sizeof(localbuf)) break;
+        // ensure newline between lines (если в more уже есть '\n' — gets оставляет \n, но в xv6 gets включает \n в буфер)
+        // Удалим завершающий \n у more и заменим на '\n'
+        if (add > 0 && more[add-1] == '\n') {
+            more[add-1] = '\0';
+            add--;
+        }
+        localbuf[cur] = '\n';
+        localbuf[cur+1] = '\0';
+        my_strncat(localbuf, more, add);
+        start = strchr(localbuf, '{');
+        end = strrchr(localbuf, '}');
+      }
+
+      char *p = localbuf;
       char name[MAXNAME];
       int i = 0;
 
-      while (*p && *p != ' ' && *p != '\t' && *p != '\n' && i < MAXNAME-1)
+      // имя: до первого whitespace или '('
+      while (*p && *p == ' ') p++;
+      while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '(' && i < MAXNAME-1)
         name[i++] = *p++;
       name[i] = '\0';
 
@@ -409,8 +554,9 @@ main(void)
         if (*p == ')') p++;
       }
 
-      char *start = strchr(p, '{');
-      char *end   = strrchr(p, '}');
+      // Найдём начало и конец тела
+      start = strchr(localbuf, '{');
+      end   = strrchr(localbuf, '}');
       if (!start || !end || end <= start) {
         printf("syntax error in function definition\n");
         continue;
@@ -438,6 +584,7 @@ main(void)
       continue;
     }
 
+    // Tokenize input into argv as usual
     char *argv[16];
     int argc = 0;
     char *token = strtok(buf, " \t\n");
@@ -446,6 +593,27 @@ main(void)
       token = strtok(0, " \t\n");
     }
     argv[argc] = 0;
+
+    // builtin: echo
+    if (argc > 0 && strcmp(argv[0], "echo") == 0) {
+      // print rest joined by spaces; if single argument that is arithmetic, evaluate
+      if (argc == 2 && is_arith_string(argv[1])) {
+        int val;
+        if (eval_arith(argv[1], &val)) {
+          char bufv[64];
+          int n = itoa(val, bufv);
+          write(1, bufv, n);
+          write(1, "\n", 1);
+          continue;
+        }
+      }
+      for (int i = 1; i < argc; i++) {
+        if (i > 1) write(1, " ", 1);
+        write(1, argv[i], strlen(argv[i]));
+      }
+      write(1, "\n", 1);
+      continue;
+    }
 
     struct func *f = 0;
     if (argc > 0)
@@ -792,5 +960,4 @@ nulterminate(struct cmd *cmd)
   }
   return cmd;
 }
-
 
