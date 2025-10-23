@@ -370,11 +370,10 @@ char* my_strncat(char *dst, const char *src, int n) {
     return dst;
 }
 
-void run_func(struct func *f, int argc, char **argv) {
+void run_func(struct func *f, int argc, char **argv, int capture) {
     char expanded[MAXBODY];
     strcpy(expanded, f->body);
 
-    // Подстановка позиционных параметров $1..$9
     for (int i = 1; i < argc && i <= 9; i++) {
         char var[3] = { '$', '0'+i, 0 };
         char *pos = my_strstr(expanded, var);
@@ -393,78 +392,130 @@ void run_func(struct func *f, int argc, char **argv) {
             pos = my_strstr(expanded, var);
         }
     }
-    
 
-    // Теперь обрабатываем тело построчно
-    char *line = expanded;
-    while (*line) {
-        // Найдём конец строки
-        char *nl = strchr(line, '\n');
-        char save = 0;
-        if (nl) {
-            save = *nl;
-            *nl = 0;
-        }
+    int body_has_echo = (my_strstr(expanded, "echo") != 0);
 
-        char *trimmed = trim(line);
-        if (trimmed && *trimmed) {
-            // Если строка начинается с "echo", обработаем как встроенную
-            if (startswith(trimmed, "echo") && (trimmed[4] == ' ' || trimmed[4] == '\t' || trimmed[4] == 0)) {
-                char *args = trimmed + 4;
-                args = trim(args);
-                if (!args) args = "";
-                // Если аргумент — арифметическое выражение, вычислим его
-                int val;
-                if (is_arith_string(args) && eval_arith(args, &val)) {
-                    char buf[64];
-                    int n = itoa(val, buf);
-                    write(1, buf, n);
-                    write(1, "\n", 1);
-                } else {
-                    int len = strlen(args);
-                    if (len > 0) {
-                        write(1, args, len);
-                    }
-                    write(1, "\n", 1);
-                }
-            } else if (is_arith_string(trimmed)) {
-                // строка — только арифметика
-                int val;
-                if (eval_arith(trimmed, &val)) {
-                    char buf[64];
-                    int n = itoa(val, buf);
-                    write(1, buf, n);
-                    write(1, "\n", 1);
-                } else {
-                    // не удалось распарсить — выводим как текст
-                    int len = strlen(trimmed);
-                    write(1, trimmed, len);
-                    write(1, "\n", 1);
-                }
-            } else {
-                // попытка выполнить как команда: создаём child и runcmd в нём
-                int pid = fork();
-                if (pid < 0) {
-                    fprintf(2, "fork failed in function\n");
-                } else if (pid == 0) {
-                    // child: выполнить команду, используя parsecmd + runcmd
-                    struct cmd *c = parsecmd(trimmed);
-                    runcmd(c); // не возвращает
-                } else {
-                    // parent: ждём
-                    wait(0);
-                }
-            }
-        }
-
-        if (nl) {
-            *nl = save;
-            line = nl + 1;
-        } else {
-            break;
+    int pipefd[2];
+    if (capture) {
+        if (pipe(pipefd) < 0) {
+            fprintf(2, "pipe failed\n");
+            return;
         }
     }
+
+    int pid = fork();
+    if (pid < 0) {
+        fprintf(2, "fork failed in function\n");
+        if (capture) { close(pipefd[0]); close(pipefd[1]); }
+        return;
+    }
+
+    if (pid == 0) {
+        if (capture) {
+            // направим stdout (fd 1) и stderr (fd 2) в pipe write end
+            close(pipefd[0]);
+            close(1);
+            dup(pipefd[1]); // now fd 1 -> pipe write
+            close(pipefd[1]);
+        }
+        char *line = expanded;
+        while (*line) {
+            char *nl = strchr(line, '\n');
+            char save = 0;
+            if (nl) { save = *nl; *nl = 0; }
+
+            char *trimmed = trim(line);
+            if (trimmed && *trimmed) {
+                if (startswith(trimmed, "echo") && (trimmed[4] == ' ' || trimmed[4] == '\t' || trimmed[4] == 0)) {
+                    char *args = trimmed + 4;
+                    args = trim(args);
+                    if (!args) args = "";
+                    int val;
+                    if (is_arith_string(args) && eval_arith(args, &val)) {
+                        char buf[64];
+                        int n = itoa(val, buf);
+                        write(1, buf, n);
+                        write(1, "\n", 1);
+                    } else {
+                        int len = strlen(args);
+                        if (len > 0) write(1, args, len);
+                        write(1, "\n", 1);
+                    }
+                } else if (is_arith_string(trimmed)) {
+                    if (capture || body_has_echo) {
+                      int val;
+                      if (eval_arith(trimmed, &val)) {
+                        char buf[64];
+                        int n = itoa(val, buf);
+                        write(1, buf, n);
+                        write(1, "\n", 1);
+                      } else {
+                        int len = strlen(trimmed);
+                        write(1, trimmed, len);
+                        write(1, "\n", 1);
+                      }
+                  }
+                } else {
+                    // внешняя команда или любая непонятная строка
+                    // В capture-режиме — оставляем всё как есть
+                    // В обычном режиме — подавляем вывод для этих команд
+                    if (!capture && !body_has_echo) {
+                        // перенаправим stdout/stderr в временный файл (чтобы не отображалось на консоли)
+                        int fd = open(".__func_tmp_out", O_WRONLY|O_CREATE|O_TRUNC);
+                        if (fd >= 0) {
+                            close(1);
+                            dup(fd);
+                            close(2);
+                            dup(fd);
+                        }
+                        int pid2 = fork();
+                        if (pid2 < 0) {
+                            fprintf(2, "fork failed in func\n");
+                        } else if (pid2 == 0) {
+                            struct cmd *c = parsecmd(trimmed);
+                            runcmd(c); // не возвращает
+                        } else {
+                            wait(0);
+                        }
+                        // В child of child runcmd либо завершит, мы в родителе процесса-функции продолжаем
+                    } else {
+                        // capture == 1  OR body_has_echo == 1 => выполнить команду и её вывод попадёт
+                        // либо в pipe (если capture) либо на stdout (если body_has_echo)
+                        int pid2 = fork();
+                        if (pid2 < 0) {
+                            fprintf(2, "fork failed in func\n");
+                        } else if (pid2 == 0) {
+                            struct cmd *c = parsecmd(trimmed);
+                            runcmd(c);
+                        } else {
+                            wait(0);
+                        }
+                    }
+                }
+            }
+
+            if (nl) {
+                *nl = save;
+                line = nl + 1;
+            } else break;
+        }
+        exit(0);
+    } else {
+        // parent
+        if (capture) {
+            close(pipefd[1]);
+            // читаем всё из pipe и печатаем в stdout родителя (это поведение echo)
+            char buf[256];
+            int n;
+            while ((n = read(pipefd[0], buf, sizeof(buf))) > 0) {
+                write(1, buf, n);
+            }
+            close(pipefd[0]);
+        }
+        wait(0);
+    }
 }
+
 
 int
 main(void)
@@ -489,32 +540,25 @@ main(void)
     while (*bptr == ' ' || *bptr == '\t') bptr++;
 
     if (strncmp(bptr, "function ", 9) == 0) {
-      // Парсим определение функции. Поддерживаем многострочные тела: если в текущей строке нет '}', читаем новые строки пока не появится '}'
       char localbuf[MAXBODY];
       memset(localbuf, 0, sizeof(localbuf));
       // копируем текущую строку
       strncpy(localbuf, bptr + 9, sizeof(localbuf)-1);
 
-      // Если в копии нет '{' или нет '}', будем дописывать следующие строковые вводы, пока не найдём закрывающую '}'
       char *start = strchr(localbuf, '{');
       char *end = strrchr(localbuf, '}');
 
-      // Если нет '{', считать это синтаксической ошибкой
       if (!start) {
         printf("syntax error in function definition: missing '{'\n");
         continue;
       }
-
-      // Если нет '}', нужно читать дополнительные строковые вводы и дописывать в localbuf
       while (!end) {
         char more[512];
-        if (getcmd(more, sizeof(more)) < 0) break; // EOF
+        if (getcmd(more, sizeof(more)) < 0) break;
         // append more (сохраняем перевод строки как \n)
         int cur = strlen(localbuf);
         int add = strlen(more);
         if (cur + add + 2 >= (int)sizeof(localbuf)) break;
-        // ensure newline between lines (если в more уже есть '\n' — gets оставляет \n, но в xv6 gets включает \n в буфер)
-        // Удалим завершающий \n у more и заменим на '\n'
         if (add > 0 && more[add-1] == '\n') {
             more[add-1] = '\0';
             add--;
@@ -530,7 +574,6 @@ main(void)
       char name[MAXNAME];
       int i = 0;
 
-      // имя: до первого whitespace или '('
       while (*p && *p == ' ') p++;
       while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '(' && i < MAXNAME-1)
         name[i++] = *p++;
@@ -553,8 +596,6 @@ main(void)
         }
         if (*p == ')') p++;
       }
-
-      // Найдём начало и конец тела
       start = strchr(localbuf, '{');
       end   = strrchr(localbuf, '}');
       if (!start || !end || end <= start) {
@@ -593,10 +634,15 @@ main(void)
       token = strtok(0, " \t\n");
     }
     argv[argc] = 0;
-
-    // builtin: echo
     if (argc > 0 && strcmp(argv[0], "echo") == 0) {
-      // print rest joined by spaces; if single argument that is arithmetic, evaluate
+      if (argc >= 2) {
+        struct func *ff = find_func(argv[1]);
+        if (ff) {
+          run_func(ff, argc - 1, &argv[1], 1);
+          continue;
+        }
+      }
+
       if (argc == 2 && is_arith_string(argv[1])) {
         int val;
         if (eval_arith(argv[1], &val)) {
@@ -615,12 +661,13 @@ main(void)
       continue;
     }
 
+
     struct func *f = 0;
     if (argc > 0)
       f = find_func(argv[0]);
 
     if (f) {
-      run_func(f, argc, argv);
+      run_func(f, argc, argv, 0);
       continue;
     }
     
