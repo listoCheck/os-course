@@ -232,7 +232,6 @@ strtok(char *str, const char *delim)
 }
 
 
-// Преобразует целое число val в строку и записывает в buf, ну а потом возвращает длину
 int itoa(int val, char *buf) {
     char tmp[16];
     int i = 0, j, neg = 0;
@@ -286,7 +285,6 @@ static int is_arith_string(const char *s) {
 
 static int eval_arith(const char *s, int *out) {
     if (!s) return 0;
-    // Скопируем в локальный буфер с удалением пробелов
     char buf[MAXBODY];
     int bi = 0;
     for (const char *p = s; *p && bi < (int)sizeof(buf)-1; p++) {
@@ -412,10 +410,9 @@ void run_func(struct func *f, int argc, char **argv, int capture) {
 
     if (pid == 0) {
         if (capture) {
-            // направим stdout (fd 1) и stderr (fd 2) в pipe write end
             close(pipefd[0]);
             close(1);
-            dup(pipefd[1]); // now fd 1 -> pipe write
+            dup(pipefd[1]);
             close(pipefd[1]);
         }
         char *line = expanded;
@@ -456,11 +453,7 @@ void run_func(struct func *f, int argc, char **argv, int capture) {
                       }
                   }
                 } else {
-                    // внешняя команда или любая непонятная строка
-                    // В capture-режиме — оставляем всё как есть
-                    // В обычном режиме — подавляем вывод для этих команд
                     if (!capture && !body_has_echo) {
-                        // перенаправим stdout/stderr в временный файл (чтобы не отображалось на консоли)
                         int fd = open(".__func_tmp_out", O_WRONLY|O_CREATE|O_TRUNC);
                         if (fd >= 0) {
                             close(1);
@@ -473,14 +466,11 @@ void run_func(struct func *f, int argc, char **argv, int capture) {
                             fprintf(2, "fork failed in func\n");
                         } else if (pid2 == 0) {
                             struct cmd *c = parsecmd(trimmed);
-                            runcmd(c); // не возвращает
+                            runcmd(c);
                         } else {
                             wait(0);
                         }
-                        // В child of child runcmd либо завершит, мы в родителе процесса-функции продолжаем
                     } else {
-                        // capture == 1  OR body_has_echo == 1 => выполнить команду и её вывод попадёт
-                        // либо в pipe (если capture) либо на stdout (если body_has_echo)
                         int pid2 = fork();
                         if (pid2 < 0) {
                             fprintf(2, "fork failed in func\n");
@@ -504,7 +494,6 @@ void run_func(struct func *f, int argc, char **argv, int capture) {
         // parent
         if (capture) {
             close(pipefd[1]);
-            // читаем всё из pipe и печатаем в stdout родителя (это поведение echo)
             char buf[256];
             int n;
             while ((n = read(pipefd[0], buf, sizeof(buf))) > 0) {
@@ -523,7 +512,6 @@ main(void)
   static char buf[2048];
   int fd;
 
-  // Ensure that three file descriptors are open.
   while((fd = open("console", O_RDWR)) >= 0){
     if(fd >= 3){
       close(fd);
@@ -535,7 +523,6 @@ main(void)
     if(buf[0] == 0)
       continue;
 
-    // trim leading spaces
     char *bptr = buf;
     while (*bptr == ' ' || *bptr == '\t') bptr++;
 
@@ -555,7 +542,6 @@ main(void)
       while (!end) {
         char more[512];
         if (getcmd(more, sizeof(more)) < 0) break;
-        // append more (сохраняем перевод строки как \n)
         int cur = strlen(localbuf);
         int add = strlen(more);
         if (cur + add + 2 >= (int)sizeof(localbuf)) break;
