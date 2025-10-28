@@ -529,7 +529,7 @@ main(void)
     if (strncmp(bptr, "function ", 9) == 0) {
       char localbuf[MAXBODY];
       memset(localbuf, 0, sizeof(localbuf));
-      // копируем текущую строку
+
       strncpy(localbuf, bptr + 9, sizeof(localbuf)-1);
 
       char *start = strchr(localbuf, '{');
