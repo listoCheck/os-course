@@ -13,6 +13,8 @@ pagetable_t kernel_pagetable;
 
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
+extern char end[];
+
 extern char trampoline[]; // trampoline.S
 
 // Make a direct-map page table for the kernel.
@@ -302,6 +304,20 @@ uvmfree(pagetable_t pagetable, uint64 sz)
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
   freewalk(pagetable);
 }
+void uvm_mark_reachable(pagetable_t pagetable, uint64 start, uint64 sz)
+{
+  for (uint64 va = start; va < sz; va += PGSIZE) {
+    pte_t *pte = walk(pagetable, va, 0);
+    if (pte && (*pte & PTE_V)) {
+      uint64 pa = PTE2PA(*pte);
+      if (pa >= PGROUNDUP((uint64)end) && pa < PHYSTOP) {
+        int idx = pa2idx((void*)pa);
+        page_marks[idx] = 1;
+      }
+    }
+  }
+}
+
 
 // Given a parent process's page table, copy
 // its memory into a child's page table.

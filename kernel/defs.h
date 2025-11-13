@@ -205,3 +205,6 @@ void           *bd_malloc(uint64);
 
 void            dump(void);
 int             dump2(int, int, uint64*);
+extern char     *page_marks;
+int             pa2idx(void *pa);
+void            gc_run(void);

@@ -106,4 +106,11 @@ uint64 sys_dump2(void) {
   return dump2(pid, register_num, &return_value);
 }
 
+int sys_gc(void)
+{
+  gc_run();
+  return 0;
+}
+
+
 extern struct proc proc[NPROC];

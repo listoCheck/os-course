@@ -73,26 +73,26 @@ void bd_print_vector(char *vector, int len) {
   lb = 0;
   for (int b = 0; b < len; b++) {
     if (last == bit_isset(vector, b)) continue;
-    if (last == 1) //printf(" [%d, %d)", lb, b);
+    if (last == 1) printf(" [%d, %d)", lb, b);
     lb = b;
     last = bit_isset(vector, b);
   }
   if (lb == 0 || last == 1) {
-    //printf(" [%d, %d)", lb, len);
+    printf(" [%d, %d)", lb, len);
   }
-  //printf("\n");
+  printf("\n");
 }
 
 // Print buddy's data structures
 void bd_print() {
   for (int k = 0; k < nsizes; k++) {
-    //printf("size %d (blksz %ld nblk %d): free list: ", k, BLK_SIZE(k), NBLK(k));
+    printf("size %d (blksz %ld nblk %d): free list: ", k, BLK_SIZE(k), NBLK(k));
     lst_print(&bd_sizes[k].free);
-    //printf("  alloc (XOR pairs):");
+    printf("  alloc (XOR pairs):");
     // With XOR optimization, alloc array stores one bit per pair  
     bd_print_vector(bd_sizes[k].alloc, (NBLK(k) + 1) / 2);
     if (k > 0) {
-      //printf("  split:");
+      printf("  split:");
       bd_print_vector(bd_sizes[k].split, NBLK(k));
     }
   }
@@ -307,7 +307,7 @@ int bd_initfree(void *bd_left, void *bd_right) {
 // Mark the range [bd_base,p) as allocated
 int bd_mark_data_structures(char *p) {
   int meta = p - (char *)bd_base;
-  //printf("bd: %d meta bytes for managing %ld bytes of memory\n", meta,
+  printf("bd: %d meta bytes for managing %ld bytes of memory\n", meta,
          BLK_SIZE(MAXSIZE));
   bd_mark(bd_base, p);
   return meta;
@@ -317,7 +317,7 @@ int bd_mark_data_structures(char *p) {
 int bd_mark_unavailable(void *end, void *left) {
   int unavailable = BLK_SIZE(MAXSIZE) - (end - bd_base);
   if (unavailable > 0) unavailable = ROUNDUP(unavailable, LEAF_SIZE);
-  //printf("bd: 0x%x bytes unavailable\n", unavailable);
+  printf("bd: 0x%x bytes unavailable\n", unavailable);
 
   void *bd_end = bd_base + BLK_SIZE(MAXSIZE) - unavailable;
   bd_mark(bd_end, bd_base + BLK_SIZE(MAXSIZE));
@@ -338,14 +338,15 @@ void bd_init(void *base, void *end) {
     nsizes++;  // round up to the next power of 2
   }
 
-  //printf("bd: memory sz is %ld bytes; allocate an size array of length %d\n",(char *)end - p, nsizes);
+  printf("bd: memory sz is %ld bytes; allocate an size array of length %d\n",
+         (char *)end - p, nsizes);
 
   // allocate bd_sizes array
   bd_sizes = (Sz_info *)p;
   int sz_info_bytes = sizeof(Sz_info) * nsizes;
   p += sz_info_bytes;
   memset(bd_sizes, 0, sizeof(Sz_info) * nsizes);
-  //printf("bd: Sz_info array: %d bytes (sizeof(Sz_info)=%lu)\n", sz_info_bytes, sizeof(Sz_info));
+  printf("bd: Sz_info array: %d bytes (sizeof(Sz_info)=%lu)\n", sz_info_bytes, sizeof(Sz_info));
 
   // initialize free list and allocate the alloc array for each size k
   // With XOR optimization, we only need one bit per PAIR of blocks
@@ -368,7 +369,8 @@ void bd_init(void *base, void *end) {
     total_alloc += sz;
     total_alloc_orig += orig_sz;
   }
-  //printf("bd: total alloc array size: %d bytes (orig would be %d, saved %d)\n", total_alloc, total_alloc_orig, total_alloc_orig - total_alloc);
+  printf("bd: total alloc array size: %d bytes (orig would be %d, saved %d)\n", 
+         total_alloc, total_alloc_orig, total_alloc_orig - total_alloc);
 
   // allocate the split array for each size k, except for k = 0, since
   // we will not split blocks of size k = 0, the smallest size.
@@ -380,11 +382,12 @@ void bd_init(void *base, void *end) {
     p += sz;
     total_split += sz;
   }
-  //printf("bd: total split array size: %d bytes\n", total_split);
+  printf("bd: total split array size: %d bytes\n", total_split);
   
   char *p_before_round = p;
   p = (char *)ROUNDUP((uint64)p, LEAF_SIZE);
-  //printf("bd: before ROUNDUP: %p, after: %p, padding: %ld bytes\n", p_before_round, p, p - p_before_round);
+  printf("bd: before ROUNDUP: %p, after: %p, padding: %ld bytes\n", 
+         p_before_round, p, p - p_before_round);
 
   // done allocating; mark the memory range [base, p) as allocated, so
   // that buddy will not hand out that memory.
@@ -399,10 +402,11 @@ void bd_init(void *base, void *end) {
   int free = bd_initfree(p, bd_end);
 
   // check if the amount that is free is what we expect
-  //printf("bd: free=%d, expected=%ld (MAXSIZE=%ld, meta=%d, unavail=%d)\n",free, BLK_SIZE(MAXSIZE) - meta - unavailable, BLK_SIZE(MAXSIZE), meta, unavailable);
-  //printf("bd: free memory in pages: %d\n", free / 4096);
+  printf("bd: free=%d, expected=%ld (MAXSIZE=%ld, meta=%d, unavail=%d)\n",
+         free, BLK_SIZE(MAXSIZE) - meta - unavailable, BLK_SIZE(MAXSIZE), meta, unavailable);
+  printf("bd: free memory in pages: %d\n", free / 4096);
   if (free != BLK_SIZE(MAXSIZE) - meta - unavailable) {
-    //printf("free %d %ld\n", free, BLK_SIZE(MAXSIZE) - meta - unavailable);
+    printf("free %d %ld\n", free, BLK_SIZE(MAXSIZE) - meta - unavailable);
     panic("bd_init: free mem");
   }
 }
