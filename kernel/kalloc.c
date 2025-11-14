@@ -85,7 +85,6 @@ kfree(void *pa) {
   bd_free(pa);
 }
 
-// Allocate one 4096-byte page of physical memory
 void*
 kalloc(void) {
   void *r = bd_malloc(PGSIZE);
