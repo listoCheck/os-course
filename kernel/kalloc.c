@@ -28,12 +28,10 @@ pa2idx(void *pa) {
 }
 
 
-// External buddy allocator API (provided in kernel/buddy.c)
 void bd_init(void*, void*);
 void bd_free(void*);
 void* bd_malloc(uint64);
 
-// Initialize buddy allocator and the page bitmaps
 void
 kinit(void) {
   bd_init((char*)PGROUNDUP((uint64)end), (void*)PHYSTOP);
@@ -70,7 +68,6 @@ kinit(void) {
   if (SAFE_IDX < 0) SAFE_IDX = 0;
 }
 
-// Free a 4096-byte page of physical memory
 void
 kfree(void *pa) {
   if (((uint64)pa % PGSIZE) != 0 || (uint64)pa < PGROUNDUP((uint64)end) || (uint64)pa >= PHYSTOP)
@@ -80,10 +77,8 @@ kfree(void *pa) {
   if (!page_allocated[idx])
     panic("kfree: double free or freeing unallocated page");
 
-  // wipe for debug
   memset(pa, 1, PGSIZE);
 
-  // bookkeeping
   page_allocated[idx] = 0;
   page_marks[idx] = 0;
 
