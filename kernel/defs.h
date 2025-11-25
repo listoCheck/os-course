@@ -9,6 +9,7 @@ struct sleeplock;
 struct stat;
 struct superblock;
 struct list;
+struct list2;
 
 // bio.c
 void            binit(void);
@@ -202,4 +203,19 @@ void           bd_init(void*,void*);
 void           bd_free(void*);
 void           *bd_malloc(uint64);
 
+// list2.c
+void           list2_init(struct list2*);
+int            list2_empty(struct list2*);
+void           list2_acquire(struct list2*);
+void           list2_release(struct list2*, struct list2*);
+void           list2_add(struct list2*, struct list2*);
+void           list2_delete(struct list2*, struct list2*);
+struct list2*  list2_next(struct list2*, struct list2*);
+struct list2*  list2_begin(struct list2*);
+void           list2_iterate(struct list2*, struct list2**);
 
+void            dump(void);
+int             dump2(int, int, uint64*);
+extern char     *page_marks;
+int             pa2idx(void *pa);
+void            gc_run(void);
