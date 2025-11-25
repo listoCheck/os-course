@@ -193,7 +193,8 @@ gc_run(void) {
 
       printf("GC: marking pages of init process %d\n", p->pid);
       mark_process_pages_bounded(pt, sz);
-      break;
+      //break;
+      return;
     }
   }
 
