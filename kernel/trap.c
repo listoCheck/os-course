@@ -37,6 +37,9 @@ void
 usertrap(void)
 {
   int which_dev = 0;
+  uint64 trap_cause_register = r_scause();
+  uint64 trap_value_register  = r_stval();
+  uint64 supervisor_exception_program_counter = r_sepc();
 
   if((r_sstatus() & SSTATUS_SPP) != 0)
     panic("usertrap: not from user mode");
@@ -48,9 +51,9 @@ usertrap(void)
   struct proc *p = myproc();
   
   // save user program counter.
-  p->trapframe->epc = r_sepc();
+  p->trapframe->epc = supervisor_exception_program_counter;
   
-  if(r_scause() == 8){
+  if(trap_cause_register == 8) {
     // system call
 
     if(killed(p))
@@ -65,11 +68,25 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } else if((which_dev = devintr()) != 0) {
     // ok
+  } else if (trap_cause_register == ERR_ACCESS_DENIED) {
+    if(uvmlazyalloc(p->pagetable, trap_value_register) != 0) {
+      printf("usertrap(): Load page fault r_scause 0x%lx pid=%d\n", trap_cause_register, p->pid);
+      printf("            r_sepc=0x%lx r_stval=0x%lx\n", supervisor_exception_program_counter, trap_value_register);
+      setkilled(p);
+    }
+  } else if (trap_cause_register == ERR_RESOURCE_NOT_FOUND) {
+    if(uvmlazyalloc(p->pagetable, trap_value_register) != 0) {
+      if(uvmcow(p->pagetable, trap_value_register) != 0) {
+        printf("usertrap(): Page fault r_scause 0x%lx pid=%d\n", trap_cause_register, p->pid);
+        printf("            r_sepc=0x%lx r_stval=0x%lx\n", supervisor_exception_program_counter, trap_value_register);
+        setkilled(p);
+      }
+    }
   } else {
-    printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
+    printf("usertrap(): unexpected trap_cause_register 0x%lx pid=%d\n", trap_cause_register, p->pid);
+    printf("            r_sepc=0x%lx r_stval=0x%lx\n", supervisor_exception_program_counter, trap_value_register);
     setkilled(p);
   }
 
@@ -215,4 +232,3 @@ devintr()
     return 0;
   }
 }
-

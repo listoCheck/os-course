@@ -179,16 +179,14 @@ static inline uint64
 r_stimecmp()
 {
   uint64 x;
-  // asm volatile("csrr %0, stimecmp" : "=r" (x) );
-  asm volatile("csrr %0, 0x14d" : "=r" (x) );
+  asm volatile("csrr %0, stimecmp" : "=r" (x) );
   return x;
 }
 
 static inline void 
 w_stimecmp(uint64 x)
 {
-  // asm volatile("csrw stimecmp, %0" : : "r" (x));
-  asm volatile("csrw 0x14d, %0" : : "r" (x));
+  asm volatile("csrw stimecmp, %0" : : "r" (x));
 }
 
 // Machine Environment Configuration Register
@@ -196,16 +194,14 @@ static inline uint64
 r_menvcfg()
 {
   uint64 x;
-  // asm volatile("csrr %0, menvcfg" : "=r" (x) );
-  asm volatile("csrr %0, 0x30a" : "=r" (x) );
+  asm volatile("csrr %0, menvcfg" : "=r" (x) );
   return x;
 }
 
 static inline void 
 w_menvcfg(uint64 x)
 {
-  // asm volatile("csrw menvcfg, %0" : : "r" (x));
-  asm volatile("csrw 0x30a, %0" : : "r" (x));
+  asm volatile("csrw menvcfg, %0" : : "r" (x));
 }
 
 // Physical Memory Protection
@@ -362,6 +358,8 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #define PTE_W (1L << 2)
 #define PTE_X (1L << 3)
 #define PTE_U (1L << 4) // user can access
+#define PTE_B (1L << 8) // blocked
+#define PTE_M (1L << 9) // mapped
 
 // shift a physical address to the right place for a PTE.
 #define PA2PTE(pa) ((((uint64)pa) >> 12) << 10)
