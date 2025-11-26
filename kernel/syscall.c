@@ -7,6 +7,7 @@
 #include "syscall.h"
 #include "defs.h"
 
+
 // Fetch the uint64 at addr from the current process.
 int
 fetchaddr(uint64 addr, uint64 *ip)
@@ -106,6 +107,11 @@ extern uint64  sys_ksem_unlink(void);
 extern uint64  sys_ksem_close(void);
 extern uint64  sys_ksem_wait(void);
 extern uint64  sys_ksem_post(void);
+extern uint64 sys_shmget(void);
+extern uint64 sys_shmat(void);
+extern uint64 sys_shmdt(void);
+extern uint64 sys_shmctl(void);
+
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -136,7 +142,10 @@ static uint64 (*syscalls[])(void) = {
 [SYS_ksem_close] sys_ksem_close,
 [SYS_ksem_wait] sys_ksem_wait,
 [SYS_ksem_post] sys_ksem_post,
-
+[SYS_shmget] sys_shmget,
+[SYS_shmat] sys_shmat,
+[SYS_shmdt] sys_shmdt,
+[SYS_shmctl] sys_shmctl,
 };
 
 void

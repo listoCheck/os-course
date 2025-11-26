@@ -25,3 +25,7 @@
 #define SYS_ksem_close 24
 #define SYS_ksem_wait 25
 #define SYS_ksem_post 26
+#define SYS_shmget 30
+#define SYS_shmat 31
+#define SYS_shmdt 32
+#define SYS_shmctl 33

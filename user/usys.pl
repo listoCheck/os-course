@@ -36,3 +36,8 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+entry("ksem_open");
+entry("ksem_unlink");
+entry("ksem_close");
+entry("ksem_wait");
+entry("ksem_post");
