@@ -30,6 +30,8 @@ main()
     virtio_disk_init(); // emulated hard disk
     userinit();      // first user process
     __sync_synchronize();
+    extern void ksem_init_all(void);
+    ksem_init_all();
     started = 1;
   } else {
     while(started == 0)

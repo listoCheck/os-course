@@ -101,6 +101,11 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+extern uint64  sys_ksem_open(void);
+extern uint64  sys_ksem_unlink(void);
+extern uint64  sys_ksem_close(void);
+extern uint64  sys_ksem_wait(void);
+extern uint64  sys_ksem_post(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -126,6 +131,12 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_ksem_open] sys_ksem_open,
+[SYS_ksem_unlink] sys_ksem_unlink,
+[SYS_ksem_close] sys_ksem_close,
+[SYS_ksem_wait] sys_ksem_wait,
+[SYS_ksem_post] sys_ksem_post,
+
 };
 
 void
