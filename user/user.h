@@ -41,3 +41,11 @@ void *memcpy(void *, const void *, uint);
 // umalloc.c
 void* malloc(uint);
 void free(void*);
+
+typedef int sem_t;
+
+sem_t ksem_open(const char *name, int oflag, int value);
+int ksem_unlink(const char *name);
+int ksem_close(sem_t sem);
+int ksem_wait(sem_t sem);
+int ksem_post(sem_t sem);

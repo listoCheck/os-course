@@ -3,7 +3,6 @@
 #include "sem.h"
 #include "spinlock.h"
 
-// Простые функции для строк
 int strcmpsem(const char *p, const char *q) {
     while(*p && (*p == *q)) { p++; q++; }
     return *(unsigned char*)p - *(unsigned char*)q;
@@ -16,10 +15,8 @@ char *strncpysem(char *dst, const char *src, int n) {
     return ret;
 }
 
-// Таблица семафоров
 static struct ksem sem_table[MAX_SEMS];
 
-// Spinlock для защиты таблицы
 static struct spinlock sem_lock;
 
 void ksem_init_all(void) {
@@ -66,7 +63,6 @@ int ksem_open(const char *name, int oflag, int value) {
         return -1;
     }
 
-    // найти свободный слот
     for(int i = 0; i < MAX_SEMS; i++){
         if(!sem_table[i].inuse){
             sem_table[i].inuse = 1;
@@ -122,7 +118,7 @@ int ksem_wait(int semid) {
         return 0;
     }
     release(&sem_lock);
-    return -1; // нет блокировки в этой версии — просто проверка
+    return -1;
 }
 
 int ksem_post(int semid) {

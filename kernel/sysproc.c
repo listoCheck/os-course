@@ -100,7 +100,7 @@ sys_ksem_open(void)
     int value;
     if (argstr(0, name, sizeof(name)) < 0)
         return -1;
-    argint(1, &oflag);   // argint returns void — сравнивать нельзя
+    argint(1, &oflag);
     argint(2, &value);
     return ksem_open(name, oflag, value);
 }
@@ -175,8 +175,6 @@ sys_shmctl(void)
     int shmid, cmd;
     argint(0, &shmid);
     argint(1, &cmd);
-
-    // пока поддерживаем только удаление сегмента:
     return shmctl_rm(shmid);
 }
 

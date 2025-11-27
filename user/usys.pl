@@ -41,3 +41,6 @@ entry("ksem_unlink");
 entry("ksem_close");
 entry("ksem_wait");
 entry("ksem_post");
+entry("shmget");
+entry("shmat");
+entry("shmdt");
