@@ -24,7 +24,6 @@ int main(void) {
     }
 
     if(fork() == 0){
-        // CHILD
         ksem_wait(s);
         p[0] = 'C';
         write(1, "child wrote C\n", 14);
@@ -32,15 +31,13 @@ int main(void) {
         ksem_close(s);
         exit(0);
     } else {
-        // PARENT
         ksem_wait(s);
         p[0] = 'P';
         write(1, "parent wrote P\n", 15);
         ksem_post(s);
 
-        wait(0); // ждем завершения ребенка
+        wait(0);
 
-        // вывод финального значения в shared memory
         write(1, "final value in shared memory: ", 29);
         write(1, &p[0], 1);
         write(1, "\n", 1);

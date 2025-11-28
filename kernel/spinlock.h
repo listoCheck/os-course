@@ -12,7 +12,6 @@ struct spinlock {
   struct cpu *cpu;
 };
 
-// Прототипы функций spinlock
 void initlock(struct spinlock *lk, char *name);
 void acquire(struct spinlock *lk);
 void release(struct spinlock *lk);
