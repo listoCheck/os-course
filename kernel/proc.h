@@ -1,4 +1,5 @@
 // Saved registers for kernel context switches.
+#define MAX_PROC_SHMMAP 16
 struct context {
   uint64 ra;
   uint64 sp;
@@ -104,4 +105,7 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  
+  struct shmmap { int inuse; int shmid; char *addr; int npages; }
+  shm_maps[MAX_PROC_SHMMAP];
 };

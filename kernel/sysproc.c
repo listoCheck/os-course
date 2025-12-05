@@ -1,10 +1,12 @@
-#include "types.h"
+#include "types.h" 
 #include "riscv.h"
 #include "defs.h"
 #include "param.h"
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sem.h"
+#include "shm.h"
 
 uint64
 sys_exit(void)
@@ -79,8 +81,6 @@ sys_kill(void)
   return kill(pid);
 }
 
-// return how many clock tick interrupts have occurred
-// since start.
 uint64
 sys_uptime(void)
 {
@@ -91,3 +91,90 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_ksem_open(void)
+{
+    char name[32];
+    int oflag;
+    int value;
+    if (argstr(0, name, sizeof(name)) < 0)
+        return -1;
+    argint(1, &oflag);
+    argint(2, &value);
+    return ksem_open(name, oflag, value);
+}
+
+uint64 
+sys_ksem_unlink(void)
+{
+    char name[32];
+    if (argstr(0, name, sizeof(name)) < 0)
+        return -1;
+    return ksem_unlink(name);
+}
+
+uint64
+sys_ksem_close(void)
+{
+    int semid;
+    argint(0, &semid);
+    return ksem_close(semid);
+}
+
+uint64 
+sys_ksem_wait(void)
+{
+    int semid;
+    argint(0, &semid);
+    return ksem_wait(semid);
+}
+
+uint64 
+sys_ksem_post(void)
+{
+    int semid;
+    argint(0, &semid);
+    return ksem_post(semid);
+}
+
+uint64
+sys_shmget(void)
+{
+    int key, size, flags;
+    argint(0, &key);
+    argint(1, &size);
+    argint(2, &flags);
+
+    return shmget(key, size, flags);
+}
+
+uint64
+sys_shmat(void)
+{
+    int shmid, flags;
+    argint(0, &shmid);
+    argint(1, &flags);
+
+    void *addr = shmat(shmid, flags);
+    return (uint64)addr;
+}
+
+uint64
+sys_shmdt(void)
+{
+    uint64 addr;
+    argaddr(0, &addr);
+
+    return shmdt((void*)addr);
+}
+
+uint64
+sys_shmctl(void)
+{
+    int shmid, cmd;
+    argint(0, &shmid);
+    argint(1, &cmd);
+    return shmctl_rm(shmid);
+}
+

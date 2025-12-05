@@ -13,3 +13,9 @@
 #define MAXPATH      128   // maximum file path name
 #define USERSTACK    1     // user stack pages
 
+// ERRORS
+
+#define ERR_ACCESS_DENIED 13
+#define ERR_RESOURCE_NOT_FOUND 15
+
+// ERRORS

@@ -20,3 +20,12 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
+#define SYS_ksem_open 22
+#define SYS_ksem_unlink 23
+#define SYS_ksem_close 24
+#define SYS_ksem_wait 25
+#define SYS_ksem_post 26
+#define SYS_shmget 30
+#define SYS_shmat 31
+#define SYS_shmdt 32
+#define SYS_shmctl 33

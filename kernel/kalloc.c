@@ -21,13 +21,28 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
+  uint *refs;
+  void *pa_start;
+  void *pa_end;
 } kmem;
 
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  kmem.refs  = (uint*)end;
+  kmem.pa_end   = (void*)PGROUNDDOWN(PHYSTOP);
+  kmem.pa_start = (char*)end + (((char*)kmem.pa_end - (char*)end) / PGSIZE + 1) * sizeof(uint64);
+  kmem.pa_start = (void*)PGROUNDUP((uint64)kmem.pa_start);
+  for (
+    uint *it = kmem.refs;
+    (it - kmem.refs) < (kmem.pa_end - kmem.pa_start) / PGSIZE;
+    it++
+  ) {
+    *it = 1;
+    __sync_synchronize();
+  }
+  freerange(kmem.pa_start, kmem.pa_end);
 }
 
 void
@@ -48,10 +63,17 @@ kfree(void *pa)
 {
   struct run *r;
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+  if(
+    ((uint64)pa % PGSIZE) != 0 
+    || (void*)pa < kmem.pa_start 
+    || (void*)pa >= kmem.pa_end)
     panic("kfree");
 
-  // Fill with junk to catch dangling refs.
+  int res = __sync_sub_and_fetch(&kmem.refs[((char*)pa - (char*)kmem.pa_start) / PGSIZE], 1);
+  if (res != 0) {
+    return;
+  }
+
   memset(pa, 1, PGSIZE);
 
   r = (struct run*)pa;
@@ -60,6 +82,18 @@ kfree(void *pa)
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
+}
+
+void
+cowlink(void *pa)
+{
+  __sync_add_and_fetch(&kmem.refs[((char*)pa - (char*)kmem.pa_start) / PGSIZE], 1);
+}
+
+uint
+cowrefs(void *pa)
+{
+  return kmem.refs[((char*)pa - (char*)kmem.pa_start) / PGSIZE];
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -76,7 +110,13 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
-    memset((char*)r, 5, PGSIZE); // fill with junk
+  if (r) {
+    if (kmem.refs[((char*)r - (char*)kmem.pa_start) / PGSIZE] != 0) {
+      panic("kalloc");
+    }
+    cowlink(r);
+    memset((char*)r, 5, PGSIZE); // заполняем мусором
+  }
+
   return (void*)r;
 }
