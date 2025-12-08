@@ -55,6 +55,6 @@ export class Repository {
             `DELETE FROM ${this.tableName} WHERE ${primaryColumn} = $1`,
             [id]
         );
-        return res.rowCount > 0;
+        return Boolean(res.rowCount && res.rowCount > 0 );
     }
 }
