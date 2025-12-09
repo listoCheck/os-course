@@ -1,11 +1,10 @@
 import {Context, Next} from "koa";
-import {Repository} from "@models/repository";
-import {FileLab4} from "@models/file";
+import {repository} from "@models/repository";
 
 export async function read(ctx: Context, next: Next) {
     const token = String(ctx.query.token);
     const ino = parseInt(ctx.query.parent_ino as string, 10) || 0;
-    const file = await Repository.findByIno(ino, token);
+    const file = await repository.findByIno(ino, token);
     if (!file) {
         ctx.body = "File not found";
         return;

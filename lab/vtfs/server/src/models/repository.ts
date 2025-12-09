@@ -1,12 +1,11 @@
-// repositories/fileRepository.ts
 import { dbPool } from "../db/db-pool";
 import {FileLab4} from "@models/file";
 
 
-export class Repository {
-    static tableName = "files";
+class Repository {
+    tableName = "files";
 
-    static async findByParent(parent_ino: number, token: string): Promise<FileLab4[]> {
+    async findByParent(parent_ino: number, token: string): Promise<FileLab4[]> {
         const res = await dbPool.query(
             `SELECT * FROM ${this.tableName} WHERE parent_ino=$1 AND token=$2`,
             [parent_ino, token]
@@ -17,7 +16,7 @@ export class Repository {
         }));
     }
 
-    static async findByIno(ino: number, token: string): Promise<FileLab4 | null> {
+    async findByIno(ino: number, token: string): Promise<FileLab4 | null> {
         const res = await dbPool.query(
             `SELECT * FROM ${this.tableName} WHERE ino=$1 AND token=$2`,
             [ino, token]
@@ -27,19 +26,17 @@ export class Repository {
         return { ...row, data: row.data ? Buffer.from(row.data) : null };
     }
 
-    static async create(file: Omit<FileLab4, "ino">): Promise<FileLab4> {
-        const keys = Object.keys(file);
-        const values = Object.values(file);
-        const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
+    async create(token: string, parent_ino: number, is_dir: boolean, data: Buffer | null, name: string): Promise<FileLab4> {
         const res = await dbPool.query(
-            `INSERT INTO ${this.tableName} (${keys.join(",")}) VALUES (${placeholders}) RETURNING *`,
-            values
+            `INSERT INTO ${this.tableName} (token, parent_ino, is_dir, data, name) 
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [token, parent_ino, is_dir, data, name]
         );
         const row = res.rows[0];
         return { ...row, data: row.data ? Buffer.from(row.data) : null };
     }
 
-    static async update(ino: number, token: string, data: Partial<Omit<FileLab4, "ino">>): Promise<FileLab4 | null> {
+    async update(ino: number, token: string, data: Partial<Omit<FileLab4, "ino">>): Promise<FileLab4 | null> {
         const keys = Object.keys(data);
         const values = Object.values(data);
         if (!keys.length) return this.findByIno(ino, token);
@@ -53,7 +50,7 @@ export class Repository {
         return { ...row, data: row.data ? Buffer.from(row.data) : null };
     }
 
-    static async delete(ino: number, token: string): Promise<boolean> {
+    async delete(ino: number, token: string): Promise<boolean> {
         const res = await dbPool.query(
             `DELETE FROM ${this.tableName} WHERE ino=$1 AND token=$2`,
             [ino, token]
@@ -61,3 +58,5 @@ export class Repository {
         return Boolean(res.rowCount && res.rowCount > 0 );
     }
 }
+
+export const repository = new Repository();
