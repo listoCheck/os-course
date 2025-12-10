@@ -4,21 +4,21 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/net.h>
-#include <linux/kvec.h>
 #include <linux/inet.h>
-#include <linux/uaccess.h>
-#include "http.h"
+#include <linux/uio.h>
+#include <linux/errno.h>
+#include <linux/string.h>
 
-const char *SERVER_IP = "0.0.0.0";
-const int SERVER_PORT = 8080;
+const char *SERVER_IP = "10.0.2.2";
+const int SERVER_PORT = 8089;
 
-// callee should call kfree on vec->iov_base
+// формирует HTTP-запрос, возвращает 0 или отрицательный код ошибки
 static int fill_request(struct kvec *vec, const char *token, const char *method,
-                 size_t arg_size, va_list args) {
+                        size_t arg_size, va_list args)
+{
     char *request_buffer = kzalloc(2048 + 64, GFP_KERNEL);
-    if (!request_buffer) {
+    if (!request_buffer)
         return -ENOMEM;
-    }
 
     strcpy(request_buffer, "GET /api/");
     strcat(request_buffer, method);
@@ -42,42 +42,42 @@ static int fill_request(struct kvec *vec, const char *token, const char *method,
     return 0;
 }
 
-static int receive_all(struct socket *sock, char *buffer, size_t buffer_size) {
+// читает весь ответ в буфер
+static int receive_all(struct socket *sock, char *buffer, size_t buffer_size)
+{
     struct msghdr msg;
     struct kvec vec;
-    int total_read = 0;
+    int total = 0;
 
-    while (total_read < buffer_size) {
+    while (total < buffer_size) {
         memset(&msg, 0, sizeof(msg));
-        vec.iov_base = buffer + total_read;
-        vec.iov_len = buffer_size - total_read;
+        vec.iov_base = buffer + total;
+        vec.iov_len = buffer_size - total;
 
         int ret = kernel_recvmsg(sock, &msg, &vec, 1, vec.iov_len, 0);
-        if (ret == 0)
-            break; // EOF
-        else if (ret < 0)
-            return ret;
-        total_read += ret;
+        if (ret == 0) break; // EOF
+        if (ret < 0) return ret;
+
+        total += ret;
     }
 
-    return total_read;
+    return total;
 }
 
-static int64_t parse_http_response(char *raw, size_t raw_size, char *resp, size_t resp_size) {
+// парсит HTTP-ответ, возвращает int64_t из тела
+static int64_t parse_http_response(char *raw, size_t raw_size, char *resp, size_t resp_size)
+{
     char *p = raw;
     char *line, *status;
     int content_length = -1;
 
     line = strsep(&p, "\r\n");
-    if (!line)
-        return -6;
+    if (!line) return -6;
 
     status = strsep(&line, " ");
-    if (!status)
-        return -6;
+    if (!status) return -6;
     status = strsep(&line, " ");
-    if (!status)
-        return -6;
+    if (!status) return -6;
 
     if (strcmp(status, "200") != 0)
         return -5;
@@ -107,9 +107,11 @@ static int64_t parse_http_response(char *raw, size_t raw_size, char *resp, size_
     return ret_val;
 }
 
+// делает HTTP-вызов
 int64_t vtfs_http_call(const char *token, const char *method,
                        char *response_buffer, size_t buffer_size,
-                       size_t arg_size, ...) {
+                       size_t arg_size, ...)
+{
     struct socket *sock;
     struct sockaddr_in saddr;
     int64_t ret;
@@ -142,6 +144,8 @@ int64_t vtfs_http_call(const char *token, const char *method,
 
     struct msghdr msg;
     memset(&msg, 0, sizeof(msg));
+
+
     error = kernel_sendmsg(sock, &msg, &vec, 1, vec.iov_len);
     kfree(vec.iov_base);
     if (error < 0) {
@@ -170,7 +174,9 @@ int64_t vtfs_http_call(const char *token, const char *method,
     return ret;
 }
 
-void encode(const char *src, char *dst) {
+// URL-encode
+void encode(const char *src, char *dst)
+{
     while (*src) {
         if ((*src >= '0' && *src <= '9') ||
             (*src >= 'a' && *src <= 'z') ||
