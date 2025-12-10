@@ -7,7 +7,6 @@ import {create} from "@api/middlewares/cruds/create";
 import {unlink} from "@api/middlewares/cruds/unlink";
 
 const router = new Router();
-router.prefix("api")
 router.get("/list", list)
 router.get("/read", read)
 router.get("/create", create)
