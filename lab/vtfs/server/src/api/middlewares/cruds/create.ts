@@ -1,23 +1,21 @@
-import { Context, Next } from "koa";
-import { repository } from "@models/repository";
+import {Context, Next} from "koa";
+import {repository} from "@models/repository";
+import {sendResponse} from "@api/middlewares/cruds/utils/sendResponse";
 
 export async function create(ctx: Context, next: Next) {
     const token = String(ctx.query.token);
-    const parentIno = parseInt(ctx.query.parent_ino as string, 10) || 0;
+    const ino = parseInt(ctx.query.ino as string, 10) || 0;
     const name = ctx.query.name as string;
 
     let rawData = ctx.query.data;
-    if (Array.isArray(rawData)) {
-        rawData = rawData[0] || "";
-    }
+    if (Array.isArray(rawData)) rawData = rawData[0] || "";
     const content = Buffer.from(rawData || "", "utf-8");
 
-    console.log("[create] Incoming request:", { token, parentIno, name, dataLength: content.length });
+    console.log("[create] Incoming request:", {token, ino, name, dataLength: content.length});
 
-    const newFile = await repository.create(token, parentIno, false, content, name);
+    const newFile = await repository.create(token, ino, false, content, name);
+    const bodyBuffer = Buffer.from(JSON.stringify({ino: newFile.ino}), "utf8");
 
-    console.log("[create] Response:", { ino: newFile.ino });
-
-    ctx.body = { ino: newFile.ino };
+    await sendResponse(ctx, 0, bodyBuffer);
     await next();
 }

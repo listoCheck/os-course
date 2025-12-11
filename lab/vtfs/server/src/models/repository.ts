@@ -39,6 +39,7 @@ class Repository {
     async update(ino: number, token: string, data: Partial<Omit<FileLab4, "ino">>): Promise<FileLab4 | null> {
         const keys = Object.keys(data);
         const values = Object.values(data);
+        //console.log(values)
         if (!keys.length) return this.findByIno(ino, token);
         const setString = keys.map((k, i) => `${k}=$${i+1}`).join(", ");
         const res = await dbPool.query(
