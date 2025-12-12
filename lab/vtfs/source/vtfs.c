@@ -33,12 +33,10 @@ struct vtfs_file_info {
     struct mutex lock;
 };
 
-// Глобальный список файлов
 static LIST_HEAD(vtfs_files);
-static int next_ino = 103; // Начинаем с 103, так как 101 и 102 уже используются
+static int next_ino = 103;
 static DEFINE_MUTEX(vtfs_files_lock);
 
-// Прототипы функций
 struct dentry* vtfs_mount(struct file_system_type* fs_type, int flags, const char* token, void* data);
 void vtfs_kill_sb(struct super_block* sb);
 int vtfs_fill_super(struct super_block *sb, void *data, int silent);
@@ -76,8 +74,6 @@ struct file_operations vtfs_file_ops = {
     .write = vtfs_write,
 };
 
-// статичные переменные
-// static int mask = 0;
 
 struct file_system_type vtfs_fs_type = {
     .name = "vtfs",
@@ -95,17 +91,14 @@ ssize_t vtfs_read(struct file *filp, char __user *buffer, size_t length, loff_t 
     }
 
     mutex_lock(&file_info->lock);
-    
-    // Проверяем, не вышли ли мы за пределы файла
+
     if (*offset >= file_info->content.size) {
         mutex_unlock(&file_info->lock);
-        return 0; // EOF
+        return 0;
     }
 
-    // Вычисляем, сколько байт мы можем прочитать
     length = min(length, (size_t)(file_info->content.size - *offset));
-    
-    // Копируем данные в буфер пользователя
+
     if (copy_to_user(buffer, file_info->content.data + *offset, length)) {
         mutex_unlock(&file_info->lock);
         return -EFAULT;
@@ -138,15 +131,13 @@ ssize_t vtfs_write(struct file *filp, const char __user *buffer, size_t length, 
 
     mutex_lock(&file_info->lock);
 
-    // Если пишем в начало файла (*offset == 0), очищаем существующее содержимое
     if (*offset == 0) {
         file_info->content.size = 0;
         if (file_info->content.data) {
             memset(file_info->content.data, 0, file_info->content.allocated);
         }
     }
-    
-    // Проверяем, нужно ли увеличить буфер
+
     if (*offset + length > file_info->content.allocated) {
         size_t new_size = max(*offset + length, file_info->content.allocated * 2);
         if (new_size == 0) new_size = PAGE_SIZE;
@@ -156,8 +147,7 @@ ssize_t vtfs_write(struct file *filp, const char __user *buffer, size_t length, 
             mutex_unlock(&file_info->lock);
             return -ENOMEM;
         }
-        
-        // Очищаем новую память
+
         if (new_size > file_info->content.allocated) {
             memset(new_data + file_info->content.allocated, 0, 
                    new_size - file_info->content.allocated);
@@ -167,7 +157,6 @@ ssize_t vtfs_write(struct file *filp, const char __user *buffer, size_t length, 
         file_info->content.allocated = new_size;
     }
 
-    // Проверяем корректность ASCII символов
     char *tmp_buffer = kmalloc(length, GFP_KERNEL);
     if (!tmp_buffer) {
         mutex_unlock(&file_info->lock);
@@ -180,7 +169,6 @@ ssize_t vtfs_write(struct file *filp, const char __user *buffer, size_t length, 
         return -EFAULT;
     }
 
-    // Проверяем, что все символы ASCII (0-127)
     for (size_t i = 0; i < length; i++) {
         if ((unsigned char)tmp_buffer[i] > 127) {
             kfree(tmp_buffer);
@@ -189,7 +177,6 @@ ssize_t vtfs_write(struct file *filp, const char __user *buffer, size_t length, 
         }
     }
 
-    // Копируем проверенные данные
     memcpy(file_info->content.data + *offset, tmp_buffer, length);
     kfree(tmp_buffer);
 
@@ -199,8 +186,7 @@ ssize_t vtfs_write(struct file *filp, const char __user *buffer, size_t length, 
 
     *offset += length;
     ret = length;
-    
-    // Обновляем время модификации файла
+
     struct timespec64 now = current_time(inode);
     inode_set_mtime_to_ts(inode, now);
     
@@ -446,8 +432,7 @@ int vtfs_mkdir(struct mnt_idmap *idmap, struct inode *parent_inode,
     struct inode *inode;
     ino_t parent_ino = parent_inode->i_ino;
     const char *name = child_dentry->d_name.name;
-    
-    // Проверяем, не существует ли уже директория с таким именем
+
     if (find_file_in_dir(name, parent_ino))
         return -EEXIST;
     
@@ -467,8 +452,7 @@ int vtfs_mkdir(struct mnt_idmap *idmap, struct inode *parent_inode,
         mutex_unlock(&vtfs_files_lock);
         return -ENOMEM;
     }
-    
-    // Инициализация информации о директории
+
     memset(dir_info, 0, sizeof(*dir_info));
     strncpy(dir_info->name, name, 255);
     dir_info->name[255] = '\0';
@@ -501,12 +485,10 @@ int vtfs_rmdir(struct inode *parent_inode, struct dentry *child_dentry) {
     const char *name = child_dentry->d_name.name;
     struct vtfs_file_info *dir_info, *tmp;
     struct inode *dir_inode = d_inode(child_dentry);
-    
-    // Проверяем, что директория пуста
+
     if (!simple_empty(child_dentry))
         return -ENOTEMPTY;
-    
-    // Находим и удаляем информацию о директории
+
     list_for_each_entry_safe(dir_info, tmp, &vtfs_files, list) {
         if (!strcmp(name, dir_info->name) && dir_info->ino == dir_inode->i_ino) {
             list_del(&dir_info->list);
@@ -514,8 +496,7 @@ int vtfs_rmdir(struct inode *parent_inode, struct dentry *child_dentry) {
             break;
         }
     }
-    
-    // Удаляем саму директорию
+
     return simple_rmdir(parent_inode, child_dentry);
 }
 
@@ -529,42 +510,36 @@ int vtfs_link(struct dentry *old_dentry, struct inode *parent_dir, struct dentry
 
     mutex_lock(&vtfs_files_lock);
 
-    // Ищем информацию о старом файле
     old_file_info = find_file_info(old_inode->i_ino);
     if (!old_file_info) {
         mutex_unlock(&vtfs_files_lock);
         return -ENOENT;
     }
 
-    // Проверяем, нет ли уже файла с таким именем в целевой директории
     if (find_file_in_dir(new_dentry->d_name.name, parent_dir->i_ino)) {
         mutex_unlock(&vtfs_files_lock);
         return -EEXIST;
     }
 
-    // Создаем новую запись для жесткой ссылки
     new_file_info = kzalloc(sizeof(*new_file_info), GFP_KERNEL);
     if (!new_file_info) {
         mutex_unlock(&vtfs_files_lock);
         return -ENOMEM;
     }
 
-    // Копируем информацию
     strncpy(new_file_info->name, new_dentry->d_name.name, sizeof(new_file_info->name) - 1);
-    new_file_info->ino = old_file_info->ino; // Используем тот же inode
+    new_file_info->ino = old_file_info->ino;
     new_file_info->parent_ino = parent_dir->i_ino;
-    new_file_info->is_dir = false; // Жесткие ссылки для директорий запрещены
-    new_file_info->content = old_file_info->content; // Ссылаемся на тот же контент
+    new_file_info->is_dir = false;
+    new_file_info->content = old_file_info->content;
     mutex_init(&new_file_info->lock);
 
     list_add(&new_file_info->list, &vtfs_files);
 
-    // Увеличиваем счетчик ссылок у старого inode
     ihold(old_inode);
 
     mutex_unlock(&vtfs_files_lock);
 
-    // Создаем новый inode
     struct inode *new_inode = vtfs_get_inode(parent_dir->i_sb, NULL, old_inode->i_mode, new_file_info->ino);
     if (!new_inode)
         return -ENOMEM;
